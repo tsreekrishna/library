@@ -1,1 +1,5 @@
 data_files/combined_for_ingestion.cscv filter=lfs diff=lfs merge=lfs -text
+crop_classification/data_files/combined_for_ingestion.csv filter=lfs diff=lfs merge=lfs -text
+crop_classification/data_files/val-4.csv filter=lfs diff=lfs merge=lfs -text
+crop_classification/data_files/test-4.csv filter=lfs diff=lfs merge=lfs -text
+crop_classification/data_files/train-4.csv filter=lfs diff=lfs merge=lfs -text

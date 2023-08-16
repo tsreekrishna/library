@@ -1,11 +1,12 @@
 from setuptools import setup, find_packages
 
-setup(name="package", 
-      version="0.1", 
-      long_description="This package has all the files related to crop classification", 
-      author="Krishna",
+setup(name="crop_classification", 
+      version="0.0.1", 
+      description="This package has all the files related to crop classification", 
+      author="T Sree Krishna",
       author_email="krishna@wadhawniai.org",
-      url="https://github.com/tsreekrishna/library".
-      packages=["package"], 
-      install_requires=["scikit-learn", "pandas", "seaborn", "xgboost", "pickle", "copy"]
-      )
+      url="https://github.com/tsreekrishna/library",
+      packages=find_packages(),
+      python_requires = ">=3.8",
+      install_requires=["scikit-learn", "pandas", "xgboost"],
+      include_package_data=True)
