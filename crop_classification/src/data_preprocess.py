@@ -1,11 +1,12 @@
 import pandas as pd
-import pickle
 from copy import deepcopy
 import numpy as np
 from xgboost import XGBClassifier
-from importlib import resources
-import io
 import pkg_resources
+from torch.utils.data import TensorDataset, DataLoader
+from torch import nn
+import torch
+from itertools import combinations
 
 def get_raw_data():
     '''
@@ -16,7 +17,7 @@ def get_raw_data():
     raw data in pandas dataframe format
 
     '''
-    raw_data = pkg_resources.resource_filename('crop_classification', 'data_files/combined_for_ingestion.csv')
+    raw_data = pkg_resources.resource_filename('crop_classification', 'src/data_files/combined_for_ingestion.csv')
     raw_df = pd.read_csv(raw_data)
     return raw_df
 
@@ -29,13 +30,111 @@ def get_model_data():
     3 Dataframes -> train, validation and test sets used for modelling. 
 
     '''
-    val_data = pkg_resources.resource_filename('crop_classification', 'data_files/val-4.csv')
+    val_data = pkg_resources.resource_filename('crop_classification', 'src/data_files/val-4.csv')
     val_df = pd.read_csv(val_data)
-    test_data = pkg_resources.resource_filename('crop_classification', 'data_files/test-4.csv')
+    test_data = pkg_resources.resource_filename('crop_classification', 'src/data_files/test-4.csv')
     test_df = pd.read_csv(test_data)
-    train_data = pkg_resources.resource_filename('crop_classification', 'data_files/train-4.csv')
+    train_data = pkg_resources.resource_filename('crop_classification', 'src/data_files/train-4.csv')
     train_df = pd.read_csv(train_data)
     return train_df, val_df, test_df
+
+class RNNModel(nn.Module):
+    def __init__(self, input_size, hidden_size, hidden_layers, output_size):
+        super(RNNModel, self).__init__()
+
+        # Defining the number of layers and the nodes in each layer
+        self.hidden_size = hidden_size
+        self.hidden_layers = hidden_layers
+
+        # RNN layers
+        self.rnn = nn.RNN(
+            input_size, hidden_size, hidden_layers, batch_first=True
+        )
+        # Fully connected layer
+        self.relu = nn.ReLU()
+        self.fc = nn.Linear(hidden_size, output_size)
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        # Initializing hidden state for first input with zeros
+        
+        # device = 'cpu'
+
+        # x.to(device)
+        
+        batch_size = x.size(0)
+        
+        # h0 = torch.zeros(self.hidden_layers, batch_size, self.hidden_size).to(device)
+        h0 = torch.zeros(self.hidden_layers, batch_size, self.hidden_size)
+        
+        # Forward propagation by passing in the input and hidden state into the model
+        out, h0 = self.rnn(x, h0)
+        
+        #Reshaping the outputs in the shape of (batch_size, seq_length, hidden_size)
+        out = out[:,-1,:]
+        out = self.relu(out)
+        out = self.fc(out)
+        out = self.softmax(out)
+
+        return out
+
+def batch_prediction_prob(data, n_features, batch_size, trained_classifier):
+    tensor = torch.Tensor(data.values)
+    data_loader = DataLoader(tensor, batch_size=batch_size)
+    with torch.no_grad():
+        pred_prob = []
+        for batch in data_loader:
+            batch = batch.view([batch.shape[0], -1, n_features])
+            trained_classifier.eval()
+            pred_prob.append(trained_classifier.forward(batch))
+    pred_prob = np.vstack([np.array(pred_prob[:-1]).reshape(-1,2), pred_prob[-1]])
+    return pred_prob
+
+class conformal_prediction:
+    def __init__(self, estimator, estimator_type):
+        self.estimator = estimator
+        self.quantile = None
+        self.coverage = None
+        self.true_class_scores = None
+        self.estimator_type = estimator_type
+        self.n = None
+    def fit(self, X_cal, y_cal):
+        if self.estimator_type == 'XGB':
+            cal_pred_proba = self.estimator.predict_proba(X_cal)
+        elif self.estimator_type == 'RNN':
+            cal_pred_proba = batch_prediction_prob(X_cal, X_cal.shape[1], 8, self.estimator)
+        true_class_prob = np.array(list(map(lambda row, idx:row[idx], cal_pred_proba, y_cal)))
+        self.true_class_scores = 1 - true_class_prob
+        self.n = X_cal.shape[0]
+    def predict(self, X_test, alpha=0.05):
+        self.coverage = (self.n+1)*(1 - alpha)/self.n
+        self.quantile = np.quantile(self.true_class_scores, self.coverage)
+        if self.estimator_type == 'XGB':
+            test_pred_proba = self.estimator.predict_proba(X_test)
+        elif self.estimator_type == 'RNN':
+            test_pred_proba = batch_prediction_prob(X_test, X_test.shape[1], 8, self.estimator)
+        scores = 1 - test_pred_proba
+        def func(crop):
+            crop_set = (crop <= self.quantile).nonzero()[0]
+            if len(crop_set) == 0:
+                return np.nan
+            else:
+                return ' '.join(list(map(str, crop_set)))
+        pred_set = list(map(func, scores))
+        return test_pred_proba, pred_set
+    
+def generate_label_set_map(label_map):
+    set_map = {}
+    for i in range(1,len(label_map)+1):
+        for comb in combinations(label_map.keys(), i):
+            key_comb = ''
+            value_comb = ''
+            for items in comb:
+                key_comb =  key_comb + ' ' + items
+                value_comb =  value_comb + ' ' + label_map[items]
+            key_comb, value_comb = key_comb.lstrip(), value_comb.lstrip()
+            set_map[key_comb] = value_comb
+    return set_map
 
 def _harvest_avg_impute(row):
     lst = deepcopy(row)
@@ -148,83 +247,3 @@ def data_preprocess(data):
     data = data.drop_duplicates(ignore_index=True)
 
     return data, outliers
-
-# Creating scaler and classifier objects
-scaler_path = pkg_resources.resource_filename('crop_classification', 'models/standard_scaler.pkl')
-scaler = pickle.load(open(scaler_path, 'rb'))
-classifier_path = pkg_resources.resource_filename('crop_classification', 'models/oct_2f-feb_1f.pkl')
-classifier = pickle.load(open(classifier_path, 'rb'))
-
-def point_predictions(data):
-    '''
-    Classifies the data into Wheat and Mustard
-
-    Parameters
-    -----------
-    data : Data which has to fed to the classifier (Has to be in the form 
-    of Pandas Dataframe)
-
-    Returns
-    -------
-    point predictions based on max prob among all the classes
-
-    '''
-    scaled_data = pd.DataFrame(scaler.transform(data), columns=data.columns)
-    scaled_data = scaled_data.loc[:, 'oct_2f':'feb_1f']
-    labels = classifier.predict(scaled_data)
-    labels = list(map(lambda label: 'Wheat' if label == 1 else 'Mustard', labels))
-    pred_prob = pd.DataFrame(classifier.predict_proba(scaled_data), columns=['Mustard', 'wheat'])
-    return labels, pred_prob
-
-
-class _conformal_prediction:
-    def __init__(self, estimator):
-        self.estimator = estimator
-        self.quantile = None
-        self.coverage = None
-    def fit(self, X_cal, y_cal, alpha=0.05):
-        cal_pred_proba = self.estimator.predict_proba(X_cal)
-        true_class_prob = np.array(list(map(lambda row, idx:row[idx], cal_pred_proba, y_cal)))
-        true_class_scores = 1 - true_class_prob
-        n = X_cal.shape[0]
-        self.coverage = (n+1)*(1 - alpha)/n
-        self.quantile = np.quantile(true_class_scores, self.coverage)
-    def predict(self, X_test):
-        test_pred_proba = self.estimator.predict_proba(X_test)
-        scores = 1 - test_pred_proba
-        def func(crop):
-            crop_set = (crop <= self.quantile).nonzero()[0]
-            if len(crop_set) == 0:
-                return np.nan
-            else:
-                return ' '.join(list(map(str, crop_set)))
-        pred_set = list(map(func, scores))
-        return test_pred_proba, pred_set
-
-def conformal_predictions(data, alpha=0.05):
-    '''
-    Classifies the data into wheat, mustard, wheat/mustard or NONE. 
-
-    Parameters
-    -----------
-    data : Data which has to fed to the classifier (Has to be in the form 
-    of Pandas Dataframe)
-
-    Returns
-    -------
-    set predictions using conformal_predictions algorithm
-
-    '''
-    scaled_data = pd.DataFrame(scaler.transform(data), columns=data.columns)
-    scaled_data = scaled_data.loc[:, 'oct_2f':'feb_1f']
-    _, val, _ = get_model_data()
-    X_cal, y_cal = val.drop('crop_name', axis=1), val['crop_name']
-    scaled_X_cal = pd.DataFrame(scaler.transform(X_cal), columns=X_cal.columns)
-    scaled_X_cal = scaled_X_cal.loc[:, 'oct_2f':'feb_1f']    
-    cp = _conformal_prediction(classifier)
-    cp.fit(scaled_X_cal, y_cal, alpha)
-    _, labels = cp.predict(scaled_data)
-    labels = list(map(lambda label: 'Wheat' if label == '1' else ('Mustard' if label=='0' else label), labels))
-    return labels
-
-
