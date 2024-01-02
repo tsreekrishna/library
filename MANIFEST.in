@@ -1,0 +1,2 @@
+recursive-include crop_classification/src/models * 
+recursive-include crop_classification/src/data_files *

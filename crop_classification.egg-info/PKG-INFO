@@ -1,0 +1,8 @@
+Metadata-Version: 2.1
+Name: crop-classification
+Version: 0.0.2
+Summary: This package has all the files related to crop classification
+Home-page: https://github.com/tsreekrishna/library
+Author: T Sree Krishna
+Author-email: krishna@wadhawniai.org
+Requires-Python: >=3.8
