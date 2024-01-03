@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 import pandas as pd
 
+
 def _generate_label_set_map(label_map: Dict[str, str]) -> Dict[str, str]:
     set_map = {}
     for i in range(1,len(label_map)+1):
@@ -19,20 +20,10 @@ def _generate_label_set_map(label_map: Dict[str, str]) -> Dict[str, str]:
             set_map[key_comb] = value_comb
     return set_map
 
-def _post_hrvst_impute(row):
-    lst = deepcopy(row)
-    hrvst_strt_idx = lst.index.get_loc('jan_1f')
-    for i in range(len(lst.loc['jan_1f':'apr_2f'])):
-        actual_idx = i + hrvst_strt_idx
-        if (lst[actual_idx] == 1) or (lst[actual_idx] == 0) or (pd.isna(lst[actual_idx])):
-            if lst[actual_idx-1] < 140:
-                lst[actual_idx] = (lst[actual_idx-1] + lst[actual_idx+1])/2
-    return lst
-
 def _dip_impute(row):
     lst = deepcopy(row)
-    act_strt_idx = lst.index.get_loc('jan_1f')
-    for i in range(len(lst.loc['jan_1f':'apr_1f'])):
+    act_strt_idx = lst.index.get_loc('oct_2f')
+    for i in range(len(lst.loc['oct_2f':'apr_1f'])):
         actual_idx = i + act_strt_idx
         if ((lst[actual_idx-1] - lst[actual_idx]) >= 20) and ((lst[actual_idx+1] - lst[actual_idx]) >= 20):
             lst[actual_idx] = (lst[actual_idx-1] + lst[actual_idx+1])/2

@@ -29,18 +29,15 @@ class conformal_prediction(model_prediction):
         self.coverage = None
         self.true_class_scores = None
         self.n = None
-    def fit(self, X_cal : List[List[int]], y_cal: List):
-        cal_pred_proba = super().fit_predict(X_cal)
+    def fit(self, X_cal : List[List[int]], y_cal: List, batch_size: int=8):
+        cal_pred_proba = super().fit_predict(X_cal, batch_size=batch_size) 
         true_class_prob = np.array(list(map(lambda row, idx:row[idx], cal_pred_proba, y_cal)))
         self.true_class_scores = 1 - true_class_prob
         self.n = X_cal.shape[0]
-    def predict(self, X_test, alpha=0.05):
+    def predict(self, X_test, alpha=0.05, batch_size: int=8):
         self.coverage = (self.n+1)*(1 - alpha)/self.n
         self.quantile = np.quantile(self.true_class_scores, self.coverage)
-        if self.algorithm == 'XGB':
-            test_pred_proba = self.estimator.predict_proba(X_test)
-        elif self.algorithm == 'RNN':
-            test_pred_proba = _batch_prediction_prob(X_test, X_test.shape[1], 8, self.estimator)
+        test_pred_proba = super().fit_predict(X_test, batch_size=batch_size)
         scores = 1 - test_pred_proba
         def func(crop):
             crop_set = (crop <= self.quantile).nonzero()[0]

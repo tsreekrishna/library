@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(name="crop_classification", 
-      version="0.0.2", 
+      version="0.0.3", 
       description="This package has all the files related to crop classification", 
       author="T Sree Krishna",
       author_email="krishna@wadhawniai.org",
