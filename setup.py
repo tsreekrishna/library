@@ -8,5 +8,5 @@ setup(name="crop_classification",
       url="https://github.com/tsreekrishna/library",
       packages=find_packages(),
       python_requires = ">=3.8",
-      install_requires=["scikit-learn", "pandas", "xgboost", "torch"],
+      install_requires=["scikit-learn", "pandas", "xgboost", "torch", "mapie"],
       include_package_data=True)
