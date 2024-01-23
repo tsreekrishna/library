@@ -5,10 +5,10 @@ import pandas as pd
 from xgboost import XGBClassifier
 from mapie.classification import MapieClassifier
 import torch
-from .src.models import RNNModel
-from .src.models import model_prediction
-from .src.utils.helper import _sowing_period, _harvest_period, _dip_impute, _less_than_150_drop, _generate_label_set_map
-from .src.utils.checks import data_check, algo_check, classifier_type_check, batch_size_check, alphas_check
+from crop_classification.src.models import RNNModel, model_prediction
+from crop_classification.src.utils.helper import _sowing_period, _harvest_period, _dip_impute, _less_than_150_drop, _generate_label_set_map
+from crop_classification.src.utils.checks import data_check, algo_check, classifier_type_check, batch_size_check, alpha_check
+from crop_classification.src.utils.data_loader import _load_models, _load_scalers
 
 def data_preprocess(data: np.ndarray) -> (pd.DataFrame, pd.DataFrame):
     '''
@@ -57,50 +57,12 @@ def data_preprocess(data: np.ndarray) -> (pd.DataFrame, pd.DataFrame):
 
     return data, outliers
 
-# importing necessary models
-
-def _load_models(algorithm: str='xgb', classifier_type : str='wmp'):
-    # Loading the models
-    mw_xgb_model_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mw_xgb_model.pkl')
-    mw_xgb_model = pickle.load(open(mw_xgb_model_path, 'rb'))
-    mwp_xgb_model_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mwp_xgb_model.pkl')
-    mwp_xgb_model = pickle.load(open(mwp_xgb_model_path, 'rb'))
-    mwp_xgb_mapie_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mwp_xgb_mapie.pkl')
-    mwp_xgb_mapie = pickle.load(open(mwp_xgb_mapie_path, 'rb'))
-    mw_rnn_model = RNNModel(**{'hidden_layers': 1, 'hidden_size': 16, 'input_size': 14, 'output_size': 2})
-    mw_rnn_weights_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mw_rnn_model.pth')
-    mw_rnn_model.load_state_dict(torch.load(mw_rnn_weights_path))
-    mwp_rnn_model = RNNModel(**{'hidden_layers': 1, 'hidden_size': 64, 'input_size': 14, 'output_size': 3})
-    mwp_rnn_weights_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mwp_rnn_model.pth')
-    mwp_rnn_model.load_state_dict(torch.load(mwp_rnn_weights_path))
-
-mw_xgb_model_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mw_xgb_model.pkl')
-mw_xgb_model = pickle.load(open(mw_xgb_model_path, 'rb'))
-mwp_xgb_model_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mwp_xgb_model.pkl')
-mwp_xgb_model = pickle.load(open(mwp_xgb_model_path, 'rb'))
-mwp_xgb_mapie_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mwp_xgb_mapie.pkl')
-mwp_xgb_mapie = pickle.load(open(mwp_xgb_mapie_path, 'rb'))
-mw_rnn_model = RNNModel(**{'hidden_layers': 1, 'hidden_size': 16, 'input_size': 14, 'output_size': 2})
-mw_rnn_weights_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mw_rnn_model.pth')
-mw_rnn_model.load_state_dict(torch.load(mw_rnn_weights_path))
-mwp_rnn_model = RNNModel(**{'hidden_layers': 1, 'hidden_size': 64, 'input_size': 14, 'output_size': 3})
-mwp_rnn_weights_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mwp_rnn_model.pth')
-mwp_rnn_model.load_state_dict(torch.load(mwp_rnn_weights_path))
-
-# importing necessary scalers
-mw_scaler_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mw_standard_scaler.pkl')
-mw_scaler = pickle.load(open(mw_scaler_path, 'rb'))
-mwp_scaler_path = pkg_resources.resource_filename('crop_classification', 'trained_models/mwp_standard_scaler.pkl')
-mwp_scaler = pickle.load(open(mwp_scaler_path, 'rb'))
-
 # Initializing few common variables
 rabi_season_fns = ['oct_1f', 'oct_2f', 'nov_1f', 'nov_2f', 'dec_1f', 'dec_2f', 
                     'jan_1f', 'jan_2f', 'feb_1f', 'feb_2f', 'mar_1f', 'mar_2f', 'apr_1f', 'apr_2f']
-model_maps = {'xgb':{'mw':mw_xgb_model, 'mwp': mwp_xgb_model}, 'rnn':{'mw':mw_rnn_model, 'mwp': mwp_rnn_model}}
-scaler_maps = {'mw':mw_scaler, 'mwp': mwp_scaler}
 crop_maps = {'0':'Mustard', '1':'Wheat', '2':'Potato'}
 
-def get_croptype_prediction(data: np.ndarray, algorithm: str='xgb', classifier_type : str='wmp', batch_size: int=8) -> (np.ndarray, np.ndarray):
+def get_croptype_predictions(data: np.ndarray, algorithm: str='xgb', classifier_type : str='wmp', batch_size: int=8) -> (np.ndarray, np.ndarray):
     '''
     Classifies the crop signatures into wheat, mustard and potato
     Parameters
@@ -121,19 +83,18 @@ def get_croptype_prediction(data: np.ndarray, algorithm: str='xgb', classifier_t
         Crop type label based on max probability for each data point in the data.
     '''
     # Checking arguments for exceptions
-    algo_check(algorithm), classifier_type_check(classifier_type), batch_size_check(batch_size), data_check(data)
-
     algorithm, classifier_type = algorithm.lower(), classifier_type.lower()
+
+    algo_check(algorithm), classifier_type_check(classifier_type), batch_size_check(algorithm, batch_size, classifier_type), data_check(data)
     data = pd.DataFrame(data, columns=rabi_season_fns)
-    classifier = model_maps[algorithm][classifier_type]
-    scaler = scaler_maps[classifier_type]
+    classifier = _load_models(algorithm=algorithm, classifier_type=classifier_type)
+    scaler = _load_scalers(classifier_type=classifier_type)
     data = scaler.transform(data)
-    model = model_prediction(algorithm, classifier)
-    pred_prob, point_pred = model.fit_predict(data, batch_size=batch_size)
+    pred_prob, point_pred = model_prediction(data, algorithm, classifier, batch_size)
     labels = list(map(lambda label: crop_maps[str(label)], point_pred))
     return pred_prob, labels
     
-def get_conformal_prediction(data: np.ndarray, classifier_type : str='mwp', alphas: np.array=[0.05]) -> (np.ndarray, np.ndarray):
+def get_conformal_predictions(data: np.ndarray, classifier_type : str='mwp', alpha: float=0.1) -> (np.ndarray, np.ndarray):
     '''
     
     Parameters
@@ -142,29 +103,31 @@ def get_conformal_prediction(data: np.ndarray, classifier_type : str='mwp', alph
         NDVI recorded every fortnight from the 1st fortnight of october to 2nd fortnight of april.
     classifier_type : {'mw','mwp'}, default'mwp'
         Type of classifier to be used. 'mw' stands for mustard/wheat, 'mwp' stands for mustard/wheat/potato
-    alpha:  array, default [0.05]
+    alpha:  float, default 0.1
         Significance level which determines the coverage probability of the prediction set.
     
     Returns
     -------
+    set_pred : ndarray
+        Conformal prediction set for each data point in the data.
+    labels : ndarray
+        Crop type label based on max probability from model for each data point in the data.
 
     Note: Currently, this function only works for XGBoost algorithm. Planning to add support for RNN in the future.
     '''
-    # Checking arguments for exceptions
-    classifier_type_check(classifier_type), data_check(data), alphas_check(alphas)
-
+    
     classifier_type = classifier_type.lower()
+    # Checking arguments for exceptions
+    classifier_type_check(classifier_type), data_check(data), alpha_check(alpha)
+
     data = pd.DataFrame(data, columns=rabi_season_fns)
-    classifier = model_maps[algorithm][classifier_type]
-    scaler = scaler_maps[classifier_type]
+    classifier = _load_models(algorithm='xgb', classifier_type=classifier_type, conformal=True)
+    scaler = _load_scalers(classifier_type=classifier_type)
     data = scaler.transform(data)
-    conf_pred = MapieClassifier(estimator=classifier, cv="prefit", method="aps")
-    val_path = pkg_resources.resource_filename('crop_classification', 'data_files/val.csv')
-    val = pd.read_csv(open(val_path, 'rb'))
-    X_val = val.drop('crop_name', axis=1)
-    y_val = val['crop_name']
-    conf_pred.fit(X_val, y_val)
-    py_pred, y_pis = mapie_classifier.predict(data, alpha=alphas)
+    point_pred, raw_set = classifier.predict(data, alpha=alpha)
+    raw_set = raw_set[:,:len(crop_maps),0]
+    set_pred = list(map(lambda row: ' '.join(map(str, np.nonzero(row)[0])), raw_set))
     label_set_map = _generate_label_set_map(crop_maps)
-    labels = list(map(lambda label: label_set_map[label] if type(label) == str else label, set_pred))
-    return pred_proba, labels
+    set_pred = list(map(lambda label: label_set_map[label] if type(label) == str else label, set_pred))
+    labels = list(map(lambda label: crop_maps[str(label)], point_pred))
+    return set_pred, labels

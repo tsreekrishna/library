@@ -44,17 +44,10 @@ class RNNModel(nn.Module):
 
         return out
 
-class model_prediction:
-    '''
-    model_predition class - Base class for getting predictions from ML models
-    '''
-    def __init__(self,  algorithm: str, estimator) -> [List[List[int]], List[int]]:
-        self.estimator = estimator
-        self.algorithm = algorithm
-    def fit_predict(self, X: List[List[int]], batch_size: int=8):
-        if self.algorithm == 'xgb':
-            pred_prob = self.estimator.predict_proba(X)
-        elif self.algorithm == 'rnn':
-            pred_prob = _batch_prediction_prob(X, X.shape[1], batch_size, self.estimator)
-        crop_labels = np.argmax(pred_prob, axis=1)
-        return pred_prob, crop_labels
+def model_prediction(data: List[List[int]], algorithm, estimator, batch_size: int=8):
+    if algorithm == 'xgb':
+        pred_prob = estimator.predict_proba(data)
+    elif algorithm == 'rnn':
+        pred_prob = _batch_prediction_prob(data, data.shape[1], batch_size, estimator)
+    crop_labels = np.argmax(pred_prob, axis=1)
+    return pred_prob, crop_labels

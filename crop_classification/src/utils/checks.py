@@ -6,13 +6,13 @@ class InvalidInputError(Exception):
 def data_check(arr):
     # Is the input a 2d array with 14 columns?""
     if not (isinstance(arr, list) or isinstance(arr, np.ndarray)):
-        raise InvalidInputError("Input must be a list or a NumPy array.")
+        raise InvalidInputError("Data input must be a list or a NumPy array.")
     if not ((isinstance(arr, list) and all(isinstance(row, list) for row in arr)) or (isinstance(arr, np.ndarray) and arr.ndim == 2)):
-        raise InvalidInputError("Input must be a 2D array.")
+        raise InvalidInputError("Data input must be a 2D array.")
     if not (len(arr) > 0):
-        raise InvalidInputError("Empty 2D array")
+        raise InvalidInputError("Input data is an empty 2D array")
     if not (len(arr[0]) == 14):
-        raise InvalidInputError("Input must have exactly 14 columns")
+        raise InvalidInputError("Data input must have exactly 14 columns")
 
 def algo_check(algo):
     if algo not in {'xgb', 'rnn'}:
@@ -29,12 +29,6 @@ def batch_size_check(algo, batch_size, data):
         if not (batch_size <= len(data)):
             raise InvalidInputError("Batch size cannot be greater than the length of the input data")
         
-def alphas_check(alphas):
-    if not (isinstance(alphas, list) or isinstance(alphas, np.ndarray)):
-        raise InvalidInputError("Input must be a list or a NumPy array.")
-    if not ((isinstance(alphas, list) and all(isinstance(alpha, float) for alpha in alphas)) or (isinstance(alphas, np.ndarray) and alphas.ndim == 1)):
-        raise InvalidInputError("Input must be a 1D array of floats.")
-    if not (len(alphas) > 0):
-        raise InvalidInputError("Empty 1D array")
-    if not (all(alpha > 0 and alpha < 1 for alpha in alphas)):
-        raise InvalidInputError("Input must be a 1D array of floats between 0 and 1.")
+def alpha_check(alpha):
+    if not (alpha > 0 and alpha < 1):
+        raise InvalidInputError("Input must be a float value between 0 and 1.")
