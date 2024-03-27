@@ -1,0 +1,2 @@
+recursive-include crop_classification/trained_models * 
+recursive-include crop_classification/data_files *
