@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from crop_classification.crop_type_prediction import data_preprocess, get_croptype_predictions, get_conformal_predictions
+from crop_classification.inference import data_preprocess, get_croptype_predictions, get_conformal_predictions
 
 class TestDataPreprocess(unittest.TestCase):
 
